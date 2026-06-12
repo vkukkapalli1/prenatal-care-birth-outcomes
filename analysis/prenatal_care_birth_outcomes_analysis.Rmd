@@ -1,0 +1,474 @@
+---
+title: "The Impact of Maternal Sociodemographic Factors on Prenatal Care"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Introduction
+
+This project investigates how the timing of prenatal care initiation relates to birth outcomes, specifically birthweight and gestational age, using U.S. natality data from 2017 to 2023.  
+Birthweight and gestational age are critical indicators of neonatal health, and understanding factors associated with better outcomes can inform public health policies and clinical interventions.  
+We use a nationally representative dataset from the National Center for Health Statistics (NCHS) Vital Statistics system, with variables capturing maternal demographics, prenatal care details, delivery methods, and birth outcomes.
+
+In this analysis, we:
+- Summarize descriptive statistics across key maternal and infant variables
+- Conduct bivariate analyses (ANOVA, Chi-square tests) to explore relationships between prenatal care timing and birth outcomes
+- Build a multivariate linear regression model to predict birthweight from maternal and pregnancy-related factors
+- Visualize key trends and findings
+
+## Variables and Coding Used (refered from the codebook)
+
+| Variable Name | Description | Categories / Coding |
+|:--|:--|:--|
+| `maternal_age` | Mother's age at delivery | Continuous (in years) |
+| `marital_status` | Mother's marital status | Married, Unmarried |
+| `education_level` | Mother's education level | ≤8th grade, 9–12 no diploma, HS Grad, Some College, Associate, Bachelor, Master, Doctorate |
+| `prenatal_care_start` | Trimester when prenatal care began | 1st Trimester, 2nd Trimester, 3rd Trimester, No Care |
+| `bmi_category` | Prepregnancy BMI category | Underweight, Normal, Overweight, Obesity I-III |
+| `delivery_method` | Delivery method used | Vaginal, C-Section |
+| `apgar5_score_category` | 5-minute Apgar score grouping | 0–3, 4–6, 7–8, 9–10 |
+| `plurality` | Number of infants born from pregnancy | Singleton, Twin, Triplet, Quadruplet, Quintuplet+ |
+| `gestational_weeks` | Gestational age at birth | Continuous (completed weeks) |
+| `birthweight_grams` | Birthweight of infant | Continuous (grams) |
+| `year` | Year of birth record | 2017–2023 |
+
+---
+
+# 1. Load and Prepare Data
+
+In this section, we will load the cleaned natality datasets for each year (2017–2023), randomly sample 10,000 births from each, add a year identifier, and combine them into a single dataset for analysis.  
+We will also rename columns for better readability.
+
+```{r load-data, message=FALSE, warning=FALSE}
+# Loading necessary libraries
+library(tidyverse)
+library(gtsummary)
+library(knitr)
+library(car)
+
+# Loading each year's cleaned CSV, sample 10,000 rows, and add a year column
+nat17 <- read_csv("natality_2017_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2017)
+
+nat18 <- read_csv("natality_2018_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2018)
+
+nat19 <- read_csv("natality_2019_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2019)
+
+nat20 <- read_csv("natality_2020_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2020)
+
+nat21 <- read_csv("natality_2021_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2021)
+
+nat22 <- read_csv("natality_2022_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2022)
+
+nat23 <- read_csv("natality_2023_clean.csv") %>%
+  sample_n(10000) %>%
+  mutate(year = 2023)
+
+# Combine all years into one dataset
+natality_all <- bind_rows(nat17, nat18, nat19, nat20, nat21, nat22, nat23)
+
+# Rename columns to meaningful names
+natality_all <- natality_all %>%
+  rename(
+    maternal_age = MAGER,
+    marital_status = DMAR,
+    education_level = MEDUC,
+    prenatal_care_start = PRECARE5,
+    bmi_category = BMI_R,
+    delivery_method = DMETH_REC,
+    apgar5_score_category = APGAR5R,
+    plurality = DPLURAL,
+    gestational_weeks = COMBGEST,
+    birthweight_grams = DBWT
+  )
+
+# Peek at the combined dataset
+summary(natality_all)
+```
+### Interpretation:
+
+The combined dataset includes 70,000 birth records across the years 2017–2023.  
+Maternal age ranges from 12 to 50 years, with a mean of 29.26 years.  
+Gestational weeks mostly range from 17 to 47 weeks, and birthweight ranges from 230 grams to 7938 grams.  
+Minor missingness is present in gestational weeks (50 missing) and birthweight (57 missing), which will be addressed during analysis if necessary.  
+Categorical variables such as marital status, education level, and delivery method have loaded correctly as character variables.
+
+# 2. Descriptive Statistics (Table 1)
+
+In this section, we generate descriptive statistics for the study sample, summarizing both continuous and categorical variables.  
+This will provide an overview of maternal demographics, pregnancy characteristics, and birth outcomes across the pooled data from 2017–2023.
+
+```{r}
+# Creating a summary Table 1 using gtsummary
+table1 <- natality_all %>%
+  select(
+    maternal_age,
+    marital_status,
+    education_level,
+    prenatal_care_start,
+    bmi_category,
+    delivery_method,
+    apgar5_score_category,
+    plurality,
+    gestational_weeks,
+    birthweight_grams
+  ) %>%
+  tbl_summary(
+    by = NULL,  # No group comparisons needed yet
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = all_continuous() ~ 1, # Round continuous vars to 1 decimal
+    missing_text = "(Missing)"
+  ) %>%
+  modify_caption("**Table 1. Descriptive Characteristics of the Study Sample (n = 70,000)**")
+
+# Print Table 1
+table1
+```
+### Interpretation:
+
+Table 1 summarizes the descriptive characteristics of the study sample (n = 70,000) across the years 2017–2023.  
+The mean maternal age was 29.3 years (SD = 5.8). Approximately 60% of mothers were married, while 40% were unmarried.  
+The majority of mothers had at least a high school diploma, with 26% reporting high school graduation and 21% holding a bachelor's degree.  
+Most mothers (77%) initiated prenatal care during the first trimester.  
+Regarding prepregnancy BMI, 40% were classified as having normal weight, while 27% were overweight.  
+Delivery was predominantly vaginal (68%), and 85% of newborns had an Apgar score between 9–10 at five minutes.  
+Nearly all births were singleton deliveries (97%).  
+The mean gestational age was 38.5 weeks (SD = 2.5).  
+Minor missing data were noted across several variables, including marital status (12%), education level (1.4%), and prenatal care timing (2.3%).
+
+# 3. Prepare Data for Bivariate Analysis
+
+Before we conduct bivariate analyses, we address two key data cleaning steps:
+1. **Collapse small groups** in categorical variables to ensure expected cell sizes are adequate for chi-square testing
+2. **Handle missing values** case-by-case by excluding observations only when necessary for each analysis
+
+This ensures our statistical tests are valid and that we maximize the sample size wherever possible.
+
+
+## 3.1 Collapse Small Categories in Plurality
+
+**Why?**  
+The "plurality" variable contains very rare outcomes like triplet, quadruplet, and quintuplet births (<1% of all cases).  
+To avoid very small cell counts which would violate chi-square assumptions (expected counts should be ≥5 in most cells), we **collapse these into a single "Triplet+" group**.
+
+```{r}
+# Collapse rare plurality categories into "Triplet+"
+natality_all <- natality_all %>%
+  mutate(
+    plurality = case_when(
+      plurality == "Singleton" ~ "Singleton",
+      plurality == "Twin" ~ "Twin",
+      plurality %in% c("Triplet", "Quadruplet", "Quintuplet+") ~ "Triplet+",
+      TRUE ~ NA_character_ # Handle unexpected missing values if any
+    )
+  )
+```
+
+# 4. Bivariate Analyses
+
+In this step, we conduct two bivariate analyses:
+- **One-Way ANOVA**: To test for differences in mean birthweight across prenatal care initiation groups
+- **Chi-Square Test**: To test for association between plurality and delivery method
+
+These analyses will help us understand key relationships before multivariate modeling.
+
+
+# 4.1 ANOVA: Birthweight by Prenatal Care Start
+
+We use **one-way ANOVA** because:
+- The predictor (**prenatal care start**) is categorical (4 groups)
+- The outcome (**birthweight**) is continuous
+- We are comparing the means across multiple groups
+
+Before running ANOVA, we check assumptions and exclude missing values only for relevant variables.
+
+
+## 4.1.1 Prepare Data for ANOVA
+
+```{r}
+# Exclude observations with missing birthweight or prenatal care start
+anova_data <- natality_all %>%
+  filter(!is.na(prenatal_care_start), !is.na(birthweight_grams))
+```
+
+## 4.1.2 Check Assumption: Normality of Outcome
+```{r}
+# Assumption to check birthweight distribution
+ggplot(anova_data, aes(x = birthweight_grams)) +
+  geom_histogram(color = "black", fill = "orange", bins = 30) +
+  labs(title = "Distribution of Birthweight", x = "Birthweight (grams)", y = "Count") +
+  theme_minimal()
+```
+### Interpretation:
+The visualization for birthweight distribution we got is symmetrical or bell-shaped.
+The normality assumption for ANOVA is reasonably satisfied.
+
+## 4.1.3 Check Assumption: Homogeneity of Variances
+
+```{r}
+# Levene's Test for homogeneity of variances
+leveneTest(birthweight_grams ~ prenatal_care_start, data = anova_data)
+```
+### Interpretation:
+Although Levene’s Test indicated unequal variances (p < 0.001), regular one-way ANOVA was conducted because Welch’s ANOVA was not covered in course material. Results should be interpreted with caution.
+
+## 4.1.4 Perform One-Way ANOVA
+
+We now perform regular **one-way ANOVA** to determine whether there are statistically significant differences in **birthweight** across **prenatal care initiation groups**.
+
+Although Levene’s Test indicated unequal variances, we proceed with regular ANOVA because Welch’s ANOVA was not covered in the course material. Results should be interpreted with caution.
+
+```{r}
+# Perform regular one-way ANOVA
+anova_result <- aov(birthweight_grams ~ prenatal_care_start, data = anova_data)
+
+# Display ANOVA table
+summary(anova_result)
+```
+### Interpretation:
+A one-way ANOVA was conducted to examine whether mean birthweight differed based on the timing of prenatal care initiation.
+Results revealed a statistically significant difference in mean birthweight across prenatal care groups (F(3, 68362) = 127, p < 0.001).
+These findings suggest that the timing of prenatal care initiation is associated with significant differences in infant birthweight.
+Post-hoc analyses are conducted to further explore these group differences.
+
+## 4.1.5 Post-hoc Test (Tukey HSD, if ANOVA is Significant)
+If the ANOVA result is significant, we perform Tukey's Honest Significant Difference (HSD) test to determine which specific groups differ from each other.
+
+```{r}
+# Perform Tukey HSD Post-hoc Test
+TukeyHSD(anova_result)
+```
+### Interpretation:
+Post-hoc comparisons using Tukey’s Honest Significant Difference (HSD) test revealed several significant differences between prenatal care start groups.
+Mean birthweight was significantly lower among infants whose mothers began prenatal care in the second trimester compared to the first trimester (p < 0.001).
+Infants whose mothers received no prenatal care had substantially lower mean birthweight compared to all other groups (all p < 0.001).
+No statistically significant difference was found between infants whose mothers started care in the third trimester versus the first trimester (p = 0.32).
+Overall, these findings suggest that earlier initiation of prenatal care is associated with higher birthweight outcomes.
+
+## 4.1.6 Confirmatory Visualization: Boxplot
+
+```{r}
+ggplot(anova_data, aes(x = prenatal_care_start, y = birthweight_grams)) +
+  geom_boxplot(fill = "purple", color = "black") +
+  labs(
+    title = "Birthweight by Timing of Prenatal Care Initiation",
+    x = "Timing of Prenatal Care",
+    y = "Birthweight (grams)"
+  ) +
+  theme_minimal()
+
+```
+### Interpretation:
+A boxplot was generated to compare the distribution of birthweight across prenatal care initiation groups.
+Infants whose mothers initiated prenatal care during the first trimester had the highest median birthweight, followed by those who began care in the second and third trimesters.
+Infants whose mothers received no prenatal care had the lowest median birthweight and exhibited greater variability in birthweight values, with numerous low birthweight outliers.
+Despite the presence of outliers, the distributions across groups remained relatively symmetrical, and the observed differences in medians visually supported the statistically significant results obtained from the ANOVA and post-hoc analyses.
+These findings suggest that earlier initiation of prenatal care is associated with improved birthweight outcomes.
+
+# 4.2 Chi-Square Test: Plurality vs Delivery Method
+
+We are investigating whether the number of babies delivered (plurality) is associated with the mode of delivery (delivery method).  
+Both variables are categorical; therefore, a Chi-Square Test of Independence is appropriate.
+
+## 4.2.1 Prepare Data
+
+```{r}
+# Prepare dataset for Chi-square analysis
+chisq_data <- natality_all %>%
+  select(plurality, delivery_method) %>%
+  filter(!is.na(plurality) & !is.na(delivery_method))  # Remove missing values
+```
+
+## 4.2.2 Contingency Table
+```{r}
+table_chisq <- table(chisq_data$plurality, chisq_data$delivery_method)
+table_chisq
+```
+
+## 4.2.4 Perform Chi-Square Test
+
+```{r}
+chisq_test_result <- chisq.test(table_chisq)
+chisq_test_result
+```
+### Interpretation:
+A Chi-Square Test of Independence was performed to examine the association between plurality (Singleton, Twin, Triplet+) and delivery method (Vaginal vs. C-Section).
+The test revealed a statistically significant association between plurality and delivery method, χ²(2, N = 70,000) = 1983.8, p < 0.001.
+Infants from multiple births (Twins or Triplets+) were significantly more likely to be delivered via C-Section compared to Singleton births.
+These findings suggest that the likelihood of C-Section delivery increases with the number of infants in a pregnancy.
+
+## 4.2.5 Visualize with Bar Plot
+
+```{r}
+ggplot(chisq_data, aes(x = plurality, fill = delivery_method)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Delivery Method by Plurality",
+    x = "Plurality",
+    y = "Percentage",
+    fill = "Delivery Method"
+  ) +
+  theme_minimal()
+```
+### Interpretation:
+A stacked bar plot was created to visualize the relationship between plurality and delivery method.
+The plot illustrates that singleton births were more likely to be delivered vaginally (approximately 70%), whereas the majority of twin and triplet+ births were delivered via C-section.
+The percentage of C-sections increased dramatically with the number of infants: over 75% of twin births and nearly 90% of triplet+ births were delivered via C-section.
+These patterns visually reinforce the significant association found in the Chi-Square test, highlighting that higher plurality is associated with a greater likelihood of C-section delivery.
+
+# 5. Multivariate Analysis: Multiple Linear Regression
+
+## Introduction
+
+We are modeling birthweight (in grams) as a function of several maternal and birth characteristics. A multiple linear regression will allow us to examine the independent association of each predictor with birthweight, adjusting for all other variables in the model.
+
+
+## 5.1 Prepare Data
+
+```{r prepare-regression, message=FALSE, warning=FALSE}
+# Prepare dataset for regression
+regression_data <- natality_all %>%
+  select(birthweight_grams, maternal_age, marital_status, education_level,
+         prenatal_care_start, bmi_category, delivery_method, plurality, gestational_weeks) %>%
+  filter(
+    !is.na(birthweight_grams),
+    !is.na(maternal_age),
+    !is.na(marital_status),
+    !is.na(education_level),
+    !is.na(prenatal_care_start),
+    !is.na(bmi_category),
+    !is.na(delivery_method),
+    !is.na(plurality),
+    !is.na(gestational_weeks)
+  )
+```
+
+## 5.2 Fit the Multiple Linear Regression Model
+
+```{r}
+regression_model <- lm(birthweight_grams ~ maternal_age + marital_status + education_level +
+                         prenatal_care_start + bmi_category + delivery_method +
+                         plurality + gestational_weeks,
+                       data = regression_data)
+
+# Display model summary
+summary(regression_model)
+```
+
+## 5.3 Report Coefficients with Confidence Intervals (Professional Table)
+
+```{r}
+library(broom)
+
+# Create clean regression table
+tidy(regression_model, conf.int = TRUE)
+```
+
+## 5.4 Visualizations (Optional but Good)
+```{r}
+par(mfrow = c(2,2))
+plot(regression_model)
+```
+
+## 5.5 Forest Plot of Regression Coefficients
+
+```{r}
+
+
+library(ggplot2)
+library(broom)
+
+# Tidy the regression model output
+regression_tidy <- tidy(regression_model, conf.int = TRUE)
+
+# Remove intercept
+regression_tidy <- regression_tidy %>%
+  filter(term != "(Intercept)")
+
+# Create forest plot
+ggplot(regression_tidy, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = "Forest Plot of Predictors of Birthweight",
+    x = "Regression Coefficient (grams)",
+    y = "Predictor"
+  ) +
+  theme_minimal()
+```
+## 5.6 Interpretation of Multivariate Analysis
+A multiple linear regression model was constructed to examine the predictors of infant birthweight. The overall model was statistically significant, F(21, 58,900) = 1378, p < 0.001, and explained approximately 33% of the variance in birthweight (Adjusted R² = 0.329).
+
+Several predictors were independently associated with birthweight after adjustment. Higher maternal age was positively associated with birthweight, with each additional year of maternal age corresponding to an increase of approximately 2.5 grams (95% CI: 1.73, 3.27; p < 0.001). Unmarried mothers had infants with an average of 78 grams lower birthweight compared to married mothers (95% CI: -87.31, -69.09; p < 0.001). Compared to mothers with ≤8th grade education, those with 9–12 years of education without a diploma had infants weighing approximately 48 grams less (95% CI: -74.50, -22.42; p = 0.0003).
+
+No prenatal care was associated with a significantly lower birthweight (−116 grams, 95% CI: -144.54, -88.12; p < 0.001) compared to care initiated in the first trimester. Maternal BMI categories of overweight and obesity (classes I–III) were each associated with significantly higher birthweights compared to normal BMI, while being underweight was associated with a decrease in birthweight by approximately 134 grams (95% CI: -156.70, -110.32; p < 0.001). Multiples (twins and triplets+) were associated with substantially lower birthweights compared to singletons, with twins weighing about 562 grams less (95% CI: -584.44, -539.45; p < 0.001) and triplets+ weighing about 804 grams less (95% CI: -934.45, -674.07; p < 0.001). Each additional week of gestation was associated with an increase in birthweight of approximately 115 grams (95% CI: 113.56, 116.83; p < 0.001).
+
+A forest plot was created to visually display the estimated regression coefficients and their 95% confidence intervals. Predictors whose confidence intervals did not cross zero were considered statistically significant. The forest plot highlighted that gestational age had the strongest positive association with birthweight, while higher plurality (twins, triplets+) had the strongest negative impact.
+
+## 5.7 Regression Diagnostics:
+
+### 5.7.1 Normality of Residuals
+```{r}
+# Plot QQ plot for residuals
+qqnorm(residuals(regression_model))
+qqline(residuals(regression_model))
+```
+### Interpretation:
+The QQ plot shows that residuals approximately follow a normal distribution, with slight deviations at the tails, which is acceptable given the large sample size.
+
+### 5.7.2 Homoscedasticity (Equal Variance)
+```{r}
+library(lmtest)
+bptest(regression_model)
+```
+### Interpretation:
+The Breusch-Pagan test for heteroskedasticity was statistically significant (BP = 1744, df = 21, p < 0.001), indicating evidence of heteroskedasticity in the residuals. This suggests that the variance of the residuals is not constant across levels of the predictors.
+
+Given the very large sample size, slight violations of homoscedasticity are common and do not severely impact the validity of coefficient estimates, especially when inference is supported by robust standard errors if needed. Therefore, results are still interpretable with caution.
+
+
+### 5.7.3 Multicollinearity Check
+
+```{r}
+library(car)
+vif(regression_model)
+```
+### Interpretation:
+The Variance Inflation Factors (VIFs) for all predictors were low, with values close to 1 and none exceeding 2. This indicates that there is no concerning multicollinearity among the independent variables included in the regression model.
+
+## Results of Regression Diagnostics:
+Model assumptions were evaluated to ensure validity of regression results.
+The Breusch-Pagan test indicated evidence of heteroskedasticity (p < 0.001), which is common in large samples; results are interpreted with caution.
+Variance Inflation Factors (VIFs) for all predictors were low (GVIF^(1/(2*Df)) < 2.0), indicating no concerns of multicollinearity.
+Overall, the model is considered appropriate for interpretation.
+
+
+# 6. Conclusion
+This study explored the associations between maternal and birth characteristics and infant birthweight using a nationally representative sample from United States natality data. Through bivariate and multivariate analyses, several significant predictors of birthweight were identified.
+
+Initiating prenatal care earlier, higher maternal body mass index (BMI), and longer gestational age were associated with higher birthweights. Conversely, factors such as being unmarried, absence of prenatal care, maternal underweight, and multiple gestation (twins or triplets) were associated with lower birthweights.
+
+The final multiple regression model demonstrated good explanatory power, accounting for approximately 33% of the variance in birthweight. These findings emphasize the importance of early prenatal care engagement, maternal nutritional status, and close monitoring of multiple gestations in optimizing birth outcomes.
+
+Future research could explore additional factors such as maternal comorbidities, socioeconomic status, and access to healthcare services to further understand disparities in birth outcomes.
+
+
+
+
