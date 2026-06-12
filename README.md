@@ -16,6 +16,12 @@ The project uses U.S. natality data from the National Center for Health Statisti
 
 Raw data files are not included in this repository due to file size and data management considerations.
 
+## Reproducibility Note
+
+The analysis code randomly samples 10,000 observations from each yearly natality CSV file before combining the data into the final 70,000-record analysis dataset. Because of this random sampling step, results may vary slightly each time the code is run unless a fixed random seed is used.
+
+The rendered HTML report and final written report reflect the results from the analysis run used for the submitted project version.
+
 ## Variables
 
 ### Outcomes
@@ -99,9 +105,6 @@ Common R packages used in this workflow include:
 * `knitr`
 * `kableExtra`
 
-## Responsible Data Use
-
-This repository does not include full raw natality CSV files. The data are documented in the project report, but raw files are excluded to keep the repository lightweight and focused on reproducible analysis code and final outputs.
 
 ## Author
 
