@@ -63,33 +63,6 @@ The chi-square analysis showed a statistically significant association between p
 
 The multivariable regression model indicated that gestational age, maternal BMI category, plurality, prenatal care timing, marital status, and maternal education were associated with infant birthweight. Multiple births, especially twins and triplets, were associated with substantially lower birthweight, while longer gestational age was strongly associated with higher birthweight.
 
-## Repository Structure
-
-```text
-prenatal-care-birth-outcomes/
-├── README.md
-├── analysis/
-│   └── prenatal_care_birth_outcomes_analysis.Rmd
-├── reports/
-│   ├── prenatal_care_birth_outcomes_report.docx
-│   └── prenatal_care_birth_outcomes_rendered.html
-├── presentations/
-│   └── prenatal_care_birth_outcomes_presentation.pptx
-├── data/
-│   └── README.md
-└── prenatal-care-birth-outcomes.Rproj
-```
-
-## Files in This Repository
-
-| File                                                           | Description                                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------------- |
-| `analysis/prenatal_care_birth_outcomes_analysis.Rmd`           | Main R Markdown analysis file containing code and narrative |
-| `reports/prenatal_care_birth_outcomes_rendered.html`           | Rendered HTML output from the R Markdown analysis           |
-| `reports/prenatal_care_birth_outcomes_report.docx`             | Final written project report                                |
-| `presentations/prenatal_care_birth_outcomes_presentation.pptx` | Final project presentation slides                           |
-| `data/README.md`                                               | Data access and usage notes                                 |
-| `prenatal-care-birth-outcomes.Rproj`                           | RStudio project file                                        |
 
 ## Tools and Packages
 
@@ -100,10 +73,8 @@ Common R packages used in this workflow include:
 * `tidyverse`
 * `dplyr`
 * `ggplot2`
-* `car`
 * `broom`
 * `knitr`
-* `kableExtra`
 
 
 ## Author
